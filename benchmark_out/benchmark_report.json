@@ -1,0 +1,215 @@
+{
+  "model_load": {
+    "load_time_s": 0.1166,
+    "model_params_M": 3.26,
+    "rss_before_mb": 261.53,
+    "rss_after_mb": 315.83,
+    "rss_delta_mb": 54.3,
+    "tracemalloc_peak_mb": 1.1
+  },
+  "streaming": {
+    "per_file": [
+      {
+        "file": "174-50561-0000.wav",
+        "audio_duration_s": 4.02,
+        "inference_time_s": 7.3521,
+        "rtf": 0.548,
+        "e2e_latency_ms": 38.707,
+        "rss_delta_mb": 0.02,
+        "tracemalloc_peak_mb": 0.07
+      },
+      {
+        "file": "1919-142785-0000.wav",
+        "audio_duration_s": 2.66,
+        "inference_time_s": 4.675,
+        "rtf": 0.57,
+        "e2e_latency_ms": 37.796,
+        "rss_delta_mb": 0.03,
+        "tracemalloc_peak_mb": 0.05
+      },
+      {
+        "file": "2086-149214-0000.wav",
+        "audio_duration_s": 9.81,
+        "inference_time_s": 17.3634,
+        "rtf": 0.566,
+        "e2e_latency_ms": 37.988,
+        "rss_delta_mb": -127.95,
+        "tracemalloc_peak_mb": 0.17
+      },
+      {
+        "file": "2412-153947-0000.wav",
+        "audio_duration_s": 2.55,
+        "inference_time_s": 4.5364,
+        "rtf": 0.565,
+        "e2e_latency_ms": 38.018,
+        "rss_delta_mb": -68.17,
+        "tracemalloc_peak_mb": 0.05
+      },
+      {
+        "file": "2902-9006-0000.wav",
+        "audio_duration_s": 4.8,
+        "inference_time_s": 8.4414,
+        "rtf": 0.57,
+        "e2e_latency_ms": 37.806,
+        "rss_delta_mb": 0.0,
+        "tracemalloc_peak_mb": 0.09
+      },
+      {
+        "file": "5895-34615-0000.wav",
+        "audio_duration_s": 3.335,
+        "inference_time_s": 5.877,
+        "rtf": 0.569,
+        "e2e_latency_ms": 37.859,
+        "rss_delta_mb": 0.02,
+        "tracemalloc_peak_mb": 0.06
+      },
+      {
+        "file": "652-129742-0000.wav",
+        "audio_duration_s": 6.025,
+        "inference_time_s": 10.6337,
+        "rtf": 0.567,
+        "e2e_latency_ms": 37.908,
+        "rss_delta_mb": 0.02,
+        "tracemalloc_peak_mb": 0.11
+      },
+      {
+        "file": "777-126732-0000.wav",
+        "audio_duration_s": 2.74,
+        "inference_time_s": 4.8225,
+        "rtf": 0.569,
+        "e2e_latency_ms": 37.847,
+        "rss_delta_mb": 0.0,
+        "tracemalloc_peak_mb": 0.05
+      },
+      {
+        "file": "7850-73752-0000.wav",
+        "audio_duration_s": 3.155,
+        "inference_time_s": 5.5667,
+        "rtf": 0.568,
+        "e2e_latency_ms": 37.899,
+        "rss_delta_mb": 0.02,
+        "tracemalloc_peak_mb": 0.06
+      },
+      {
+        "file": "8842-302196-0000.wav",
+        "audio_duration_s": 14.65,
+        "inference_time_s": 25.7592,
+        "rtf": 0.569,
+        "e2e_latency_ms": 37.847,
+        "rss_delta_mb": -43.25,
+        "tracemalloc_peak_mb": 0.25
+      }
+    ],
+    "aggregate": {
+      "rtf_mean": 0.566,
+      "rtf_min": 0.548,
+      "rtf_max": 0.57,
+      "e2e_latency_mean_ms": 37.967,
+      "e2e_latency_min_ms": 37.796,
+      "e2e_latency_max_ms": 38.707,
+      "inference_time_mean_s": 9.5027,
+      "peak_memory_mean_mb": 0.1,
+      "peak_memory_max_mb": 0.25
+    }
+  },
+  "non_streaming": {
+    "per_file": [
+      {
+        "file": "174-50561-0000.wav",
+        "audio_duration_s": 4.02,
+        "inference_time_s": 0.2255,
+        "rtf": 17.824,
+        "rss_delta_mb": 138.59,
+        "tracemalloc_peak_mb": 0.01
+      },
+      {
+        "file": "1919-142785-0000.wav",
+        "audio_duration_s": 2.66,
+        "inference_time_s": 0.1335,
+        "rtf": 19.928,
+        "rss_delta_mb": 17.42,
+        "tracemalloc_peak_mb": 0.01
+      },
+      {
+        "file": "2086-149214-0000.wav",
+        "audio_duration_s": 9.81,
+        "inference_time_s": 0.6263,
+        "rtf": 15.664,
+        "rss_delta_mb": 309.02,
+        "tracemalloc_peak_mb": 0.01
+      },
+      {
+        "file": "2412-153947-0000.wav",
+        "audio_duration_s": 2.55,
+        "inference_time_s": 0.1349,
+        "rtf": 18.906,
+        "rss_delta_mb": 19.38,
+        "tracemalloc_peak_mb": 0.01
+      },
+      {
+        "file": "2902-9006-0000.wav",
+        "audio_duration_s": 4.8,
+        "inference_time_s": 0.2442,
+        "rtf": 19.652,
+        "rss_delta_mb": -27.36,
+        "tracemalloc_peak_mb": 0.01
+      },
+      {
+        "file": "5895-34615-0000.wav",
+        "audio_duration_s": 3.335,
+        "inference_time_s": 0.1785,
+        "rtf": 18.684,
+        "rss_delta_mb": 8.23,
+        "tracemalloc_peak_mb": 0.01
+      },
+      {
+        "file": "652-129742-0000.wav",
+        "audio_duration_s": 6.025,
+        "inference_time_s": 0.3533,
+        "rtf": 17.056,
+        "rss_delta_mb": 12.5,
+        "tracemalloc_peak_mb": 0.01
+      },
+      {
+        "file": "777-126732-0000.wav",
+        "audio_duration_s": 2.74,
+        "inference_time_s": 0.1585,
+        "rtf": 17.289,
+        "rss_delta_mb": -0.02,
+        "tracemalloc_peak_mb": 0.01
+      },
+      {
+        "file": "7850-73752-0000.wav",
+        "audio_duration_s": 3.155,
+        "inference_time_s": 0.1692,
+        "rtf": 18.645,
+        "rss_delta_mb": 0.53,
+        "tracemalloc_peak_mb": 0.01
+      },
+      {
+        "file": "8842-302196-0000.wav",
+        "audio_duration_s": 14.65,
+        "inference_time_s": 1.0062,
+        "rtf": 14.56,
+        "rss_delta_mb": 287.12,
+        "tracemalloc_peak_mb": 0.01
+      }
+    ],
+    "aggregate": {
+      "rtf_mean": 17.821,
+      "rtf_min": 14.56,
+      "rtf_max": 19.928,
+      "inference_time_mean_s": 0.323,
+      "peak_memory_mean_mb": 0.01,
+      "peak_memory_max_mb": 0.01
+    }
+  },
+  "system": {
+    "platform": "Darwin",
+    "machine": "arm64",
+    "python_version": "3.11.14 (main, Oct  9 2025, 16:16:55) [Clang 17.0.0 (clang-1700.6.3.2)]",
+    "torch_version": "2.5.1",
+    "device": "cpu",
+    "final_rss_mb": 986.42
+  }
+}
