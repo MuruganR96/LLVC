@@ -10,19 +10,17 @@ import torch.multiprocessing as mp
 from torch.utils.tensorboard import SummaryWriter
 import torch.distributed as dist
 import torch.nn.functional as F
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from torch.nn.parallel import DistributedDataParallel as DDP
 from tqdm import tqdm
 
 from dataset import LLVCDataset as Dataset
 from model import Net
-from torch.nn.parallel import DistributedDataParallel as DDP
 import utils
 import fairseq
 
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '12355'
-# check if port is available
 
 
 def net_g_step(
@@ -32,7 +30,7 @@ def net_g_step(
     og = og.to(device=device, non_blocking=True)
     gt = gt.to(device=device, non_blocking=True)
 
-    with autocast(enabled=fp16_run):
+    with autocast('cuda', enabled=fp16_run):
         output = net_g(og)
     return output, gt, og
 
@@ -75,13 +73,28 @@ def training_runner(
         logging.info(
             f"Loaded dataset at {ds.dset} containing {len(ds)} elements")
 
-    train_loader = torch.utils.data.DataLoader(data_train,
-                                               batch_size=config['batch_size'],
-                                               shuffle=True)
-    val_loader = torch.utils.data.DataLoader(data_val,
-                                             batch_size=config['eval_batch_size'])
-    dev_loader = torch.utils.data.DataLoader(data_dev,
-                                             batch_size=config['eval_batch_size'])
+    # Use num_workers and pin_memory for faster data loading
+    num_workers = min(4, os.cpu_count() or 1)
+    train_loader = torch.utils.data.DataLoader(
+        data_train,
+        batch_size=config['batch_size'],
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=True,
+        persistent_workers=num_workers > 0,
+    )
+    val_loader = torch.utils.data.DataLoader(
+        data_val,
+        batch_size=config['eval_batch_size'],
+        num_workers=num_workers,
+        pin_memory=True,
+    )
+    dev_loader = torch.utils.data.DataLoader(
+        data_dev,
+        batch_size=config['eval_batch_size'],
+        num_workers=num_workers,
+        pin_memory=True,
+    )
 
     net_g = Net(**config['model_params'])
     logging.info(f"Model size: {utils.model_size(net_g)}M params")
@@ -149,7 +162,7 @@ def training_runner(
         optim_d, gamma=config['lr_sched']['lr_decay']
     )
 
-    scaler = GradScaler(enabled=config['fp16_run'])
+    scaler = GradScaler('cuda', enabled=config['fp16_run'])
 
     # load fairseq model
     if config['aux_fairseq']['c'] > 0:
@@ -157,21 +170,32 @@ def training_runner(
         fairseq_model, cfg, task = fairseq.checkpoint_utils.load_model_ensemble_and_task([
             cp_path])
         fairseq_model = fairseq_model[0]
-        # move model to GPU
         fairseq_model.eval().to(device)
     else:
         fairseq_model = None
+
+    # Pre-load test wavs once outside the training loop
+    test_wavs = None
+    if is_main_process:
+        test_wav_paths = glob.glob(config['test_dir'] + "/*.wav")
+        if test_wav_paths:
+            test_wavs = [
+                (
+                    os.path.basename(p),
+                    utils.load_wav_to_torch(p, config['data']['sr']),
+                )
+                for p in test_wav_paths
+            ]
 
     cache = []
     loss_mel_avg = utils.RunningAvg()
     loss_fairseq_avg = utils.RunningAvg()
     for epoch in range(epoch, 10000):
-        # train_loader.batch_sampler.set_epoch(epoch)
 
         net_g.train()
         net_d.train()
 
-        use_cache = len(cache) == len(train_loader)
+        use_cache = len(cache) == len(train_loader) and len(cache) > 0
         data = cache if use_cache else enumerate(train_loader)
 
         if is_main_process:
@@ -182,6 +206,10 @@ def training_runner(
         progress_bar.update(global_step % config['checkpoint_interval'])
 
         for batch_idx, batch in data:
+            # Cache batches on first epoch for reuse
+            if not use_cache:
+                cache.append((batch_idx, batch))
+
             output, gt, og = net_g_step(
                 batch, net_g, device, config['fp16_run'])
 
@@ -197,16 +225,17 @@ def training_runner(
                 gt_sliced = gt
                 output_sliced = output.detach()
 
-            with autocast(enabled=config['fp16_run']):
+            with autocast('cuda', enabled=config['fp16_run']):
                 # Discriminator
                 y_d_hat_r, y_d_hat_g, _, _ = net_d(
                     output_sliced, gt_sliced)
-                with autocast(enabled=False):
+                with autocast('cuda', enabled=False):
                     loss_disc, losses_disc_r, losses_disc_g = discriminator_loss(
                         y_d_hat_r, y_d_hat_g
                     )
 
-            optim_d.zero_grad()
+            # set_to_none=True is faster than zeroing gradients
+            optim_d.zero_grad(set_to_none=True)
             scaler.scale(loss_disc).backward()
             scaler.unscale_(optim_d)
             if config['grad_clip_threshold'] is not None:
@@ -216,7 +245,7 @@ def training_runner(
                 net_d.parameters(), config['grad_clip_value'])
             scaler.step(optim_d)
 
-            with autocast(enabled=config['fp16_run']):
+            with autocast('cuda', enabled=config['fp16_run']):
                 # Generator
                 y_d_hat_r, y_d_hat_g, fmap_r, fmap_g = net_d(gt, output)
                 if fairseq_model is not None:
@@ -225,7 +254,7 @@ def training_runner(
                 else:
                     loss_fairseq = torch.tensor(0.0)
                 loss_fairseq_avg.update(loss_fairseq)
-                with autocast(enabled=False):
+                with autocast('cuda', enabled=False):
                     if config['aux_mel']['c'] > 0:
                         loss_mel = utils.aux_mel_loss(
                             output, gt, config) * config['aux_mel']['c']
@@ -240,7 +269,7 @@ def training_runner(
                     loss_gen_all = (loss_gen + loss_fm) + loss_mel + \
                         loss_fairseq
 
-            optim_g.zero_grad()
+            optim_g.zero_grad(set_to_none=True)
             scaler.scale(loss_gen_all).backward()
             scaler.unscale_(optim_g)
             if config['grad_clip_threshold'] is not None:
@@ -256,7 +285,7 @@ def training_runner(
 
             if is_main_process and global_step > 0 and (global_step % config['log_interval'] == 0):
                 lr = optim_g.param_groups[0]["lr"]
-                # Amor For Tensorboard display
+                # Clamp for Tensorboard display
                 if loss_mel > 50:
                     loss_mel = 50
 
@@ -316,30 +345,20 @@ def training_runner(
                 )
                 net_g.eval()
 
-                # load audio from benchmark dir
-                test_wavs = [
-                    (
-                        os.path.basename(p),
-                        utils.load_wav_to_torch(p, config['data']['sr']),
-                    )
-                    for p in glob.glob(config['test_dir'] + "/*.wav")
-                ]
+                # Use pre-loaded test wavs instead of re-loading each time
+                if test_wavs:
+                    logging.info("Testing...")
+                    with torch.no_grad():
+                        for test_wav_name, test_wav in test_wavs:
+                            test_out = net_g(test_wav.unsqueeze(
+                                0).unsqueeze(0).to(device))
+                            audio_dict.update(
+                                {f"test_audio/{test_wav_name}":
+                                    test_out[0].data.cpu().numpy()}
+                            )
 
-                logging.info("Testing...")
-                for test_wav_name, test_wav in tqdm(test_wavs, total=len(test_wavs)):
-                    test_out = net_g(test_wav.unsqueeze(
-                        0).unsqueeze(0).to(device))
-                    audio_dict.update(
-                        {f"test_audio/{test_wav_name}":
-                            test_out[0].data.cpu().numpy()}
-                    )
-
-                # don't worry about caching val dataset for now
-                for loader in [dev_loader, val_loader]:
-                    if loader == dev_loader:
-                        loader_name = "dev"
-                    else:
-                        loader_name = "val"
+                # Validation on dev and val sets
+                for loader, loader_name in [(dev_loader, "dev"), (val_loader, "val")]:
                     v_data = enumerate(loader)
                     logging.info(f"Validating on {loader_name} dataset...")
                     v_loss_mel_avg = utils.RunningAvg()
@@ -348,41 +367,39 @@ def training_runner(
 
                     with torch.no_grad():
                         for v_batch_idx, v_batch in tqdm(v_data, total=len(loader)):
-                            v_output, v_gt, og = net_g_step(
+                            v_output, v_gt, v_og = net_g_step(
                                 v_batch, net_g, device, config['fp16_run'])
 
-                        if config['aux_mel']['c'] > 0:
-                            v_loss_mel = utils.aux_mel_loss(
-                                output, gt, config) * config['aux_mel']['c']
-                            v_loss_mel_avg.update(v_loss_mel)
-                        if fairseq_model is not None:
-                            with autocast(enabled=config['fp16_run']):
-                                v_loss_fairseq = utils.fairseq_loss(
-                                    output, gt, fairseq_model) * config['aux_fairseq']['c']
-                                v_loss_fairseq_avg.update(v_loss_fairseq)
-                        v_mcd = utils.mcd(
-                            v_output, v_gt, config['data']['sr'])
-                        v_mcd_avg.update(v_mcd)
+                            # Compute validation losses per batch (bugfix: was outside loop)
+                            if config['aux_mel']['c'] > 0:
+                                v_loss_mel = utils.aux_mel_loss(
+                                    v_output, v_gt, config) * config['aux_mel']['c']
+                                v_loss_mel_avg.update(v_loss_mel)
+                            if fairseq_model is not None:
+                                with autocast('cuda', enabled=config['fp16_run']):
+                                    v_loss_fairseq = utils.fairseq_loss(
+                                        v_output, v_gt, fairseq_model) * config['aux_fairseq']['c']
+                                    v_loss_fairseq_avg.update(v_loss_fairseq)
+                            v_mcd = utils.mcd(
+                                v_output, v_gt, config['data']['sr'])
+                            v_mcd_avg.update(v_mcd)
 
                     if config['aux_mel']['c'] > 0:
                         scalar_dict.update(
                             {f"{loader_name}_metrics/mel": v_loss_mel_avg(),
                              f"{loader_name}_metrics/mcd": v_mcd_avg()}
                         )
-                        v_loss_mel_avg.reset()
                     if fairseq_model is not None:
                         scalar_dict.update(
                             {f"{loader_name}_metrics/fairseq": v_loss_fairseq_avg()}
                         )
-                        v_loss_fairseq_avg.reset()
-                    v_mcd_avg.reset()
                     audio_dict.update(
                         {f"{loader_name}_audio/gt_{i}": v_gt[i].data.cpu().numpy()
                          for i in range(min(3, v_gt.shape[0]))}
                     )
                     audio_dict.update(
-                        {f"{loader_name}_audio/in_{i}": og[i].data.cpu().numpy()
-                         for i in range(min(3, og.shape[0]))}
+                        {f"{loader_name}_audio/in_{i}": v_og[i].data.cpu().numpy()
+                         for i in range(min(3, v_og.shape[0]))}
                     )
                     audio_dict.update(
                         {f"{loader_name}_audio/pred_{i}": v_output[i].data.cpu().numpy()
@@ -441,7 +458,6 @@ def train_model(
     benchmark = torch.backends.cudnn.benchmark
     PREV_CUDA_VISIBLE_DEVICES = os.environ.get("CUDA_VISIBLE_DEVICES", None)
     if PREV_CUDA_VISIBLE_DEVICES is None:
-        PREV_CUDA_VISIBLE_DEVICES = None
         os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(
             [str(gpu) for gpu in gpus])
     else:

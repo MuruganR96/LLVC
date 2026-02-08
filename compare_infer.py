@@ -19,11 +19,11 @@ from utils import glob_audio_files
 def init_model(model_type):
     if model_type == 'rvc':
         model_path = "llvc_models/models/rvc_no_f0/f_8312_no_f0-300.pth"
-        state_dict = torch.load(model_path, map_location="cpu")
+        state_dict = torch.load(model_path, map_location="cpu", weights_only=False)
         state_dict["params"]["spk_embed_dim"] = state_dict["weight"][
             "emb_g.weight"
         ].shape[0]
-        if not "emb_channels" in state_dict["params"]:
+        if "emb_channels" not in state_dict["params"]:
             state_dict["params"]["emb_channels"] = 768  # for backward compat.
         model = SynthesizerTrnMs256NSFSidNono(
             **state_dict["params"], is_half=False
@@ -253,12 +253,9 @@ def main():
         args.model_type,
         sr_out
     )
-    if not os.path.exists(args.out_dir):
-        os.mkdir(args.out_dir)
+    os.makedirs(args.out_dir, exist_ok=True)
     # check if fname is a directory
     if os.path.isdir(args.fname):
-        if not os.path.exists(args.out_dir):
-            os.mkdir(args.out_dir)
         # recursively glob wav files
         fnames = glob_audio_files(args.fname)
         rtf_list = []

@@ -124,12 +124,15 @@ class CachedConvNet(nn.Module):
         """
         Initialize context buffer for each layer.
         """
+        total_buf = sum(self.buf_lengths)
         if height is not None:
             up_ctx = torch.zeros(
-                (batch_size, self.ctx_height, height, sum(self.buf_lengths))).to(device)
+                (batch_size, self.ctx_height, height, total_buf),
+                device=device)
         else:
             up_ctx = torch.zeros(
-                (batch_size, self.ctx_height, sum(self.buf_lengths))).to(device)
+                (batch_size, self.ctx_height, total_buf),
+                device=device)
         return up_ctx
 
     def forward(self, x, ctx):

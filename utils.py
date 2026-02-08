@@ -11,6 +11,9 @@ import torch.nn.functional as F
 from torchaudio.transforms import MFCC
 from mel_processing import mel_spectrogram_torch
 
+# Module-level cache for MFCC transforms to avoid re-creation per call
+_mfcc_cache = {}
+
 
 class Params():
     """Class that loads hyperparameters from a json file.
@@ -55,7 +58,8 @@ def latest_checkpoint_path(dir_path, regex="G_*.pth"):
 def load_checkpoint(checkpoint_path, model, optimizer=None, load_opt=True):
     assert os.path.isfile(
         checkpoint_path), f"Checkpoint '{checkpoint_path}' not found"
-    checkpoint_dict = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint_dict = torch.load(
+        checkpoint_path, map_location="cpu", weights_only=False)
     if hasattr(model, "module"):
         model.module.load_state_dict(checkpoint_dict["model"])
     else:
@@ -100,7 +104,6 @@ def model_size(model):
     num_train_params = sum(
         p.numel() for p in model.parameters() if p.requires_grad)
     params_scaled = num_train_params / 1e6
-    # round to 2 decimal places
     return round(params_scaled, 2)
 
 
@@ -146,14 +149,13 @@ def aux_mel_loss(output, gt, config):
     config_params = config['aux_mel']['params']
     if aux_mel_loss_type == "multires":
         param_dict = {}
-        config_params = config['aux_mel']['params']
         param_dict['fft_sizes'] = config_params['n_fft']
         param_dict['hop_sizes'] = config_params['hop_size']
         param_dict['win_lengths'] = config_params['win_size']
         param_dict['n_bins'] = config_params['num_mels']
         return multires_loss(output, gt, sr, param_dict)
     elif aux_mel_loss_type == "rvc":
-        param_dict = config_params
+        param_dict = config_params.copy()
         for k in param_dict:
             if isinstance(param_dict[k], list):
                 param_dict[k] = param_dict[k][0]
@@ -175,7 +177,11 @@ def aux_mel_loss(output, gt, config):
 
 
 def mcd(predicted_audio, gt_audio, sr):
-    mfcc = MFCC(sample_rate=sr).to(predicted_audio.device)
+    """Mel-Cepstral Distortion with cached MFCC transform."""
+    cache_key = (sr, predicted_audio.device)
+    if cache_key not in _mfcc_cache:
+        _mfcc_cache[cache_key] = MFCC(sample_rate=sr).to(predicted_audio.device)
+    mfcc = _mfcc_cache[cache_key]
     predicted_mfcc = mfcc(predicted_audio)
     gt_mfcc = mfcc(gt_audio.to(predicted_audio.device))
     return torch.mean(torch.abs(predicted_mfcc - gt_mfcc))
@@ -224,7 +230,7 @@ def load_wav_to_torch(full_path, sr):
 
 def fairseq_loss(output, gt, fairseq_model):
     """
-    fairseq feature mse loss, based on https://arxiv.org/abs/2301.04388
+    Fairseq feature MSE loss, based on https://arxiv.org/abs/2301.04388
     """
     gt = gt.squeeze(1)
     output = output.squeeze(1)
@@ -234,10 +240,13 @@ def fairseq_loss(output, gt, fairseq_model):
     return mse_loss
 
 
+_AUDIO_EXTENSIONS = ("*.wav", "*.mp3", "*.flac")
+
+
 def glob_audio_files(dir):
-    ext_list = ["wav", "mp3", "flac"]
+    """Recursively glob audio files with common extensions."""
     audio_files = []
-    for ext in ext_list:
+    for ext in _AUDIO_EXTENSIONS:
         audio_files.extend(glob.glob(
-            os.path.join(dir, f"**/*.{ext}"), recursive=True))
+            os.path.join(dir, "**", ext), recursive=True))
     return audio_files

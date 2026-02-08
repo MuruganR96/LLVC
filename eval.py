@@ -8,11 +8,10 @@ import librosa
 import os
 import soundfile as sf
 
+
 def resemblyze_score(gt_dir, converted_dir):
     encoder = VoiceEncoder()
-    # cast gt_dir to path
 
-    # glob recursively
     gt_paths = glob_audio_files(gt_dir)
     gt_wavs = [preprocess_wav(wav_fpath) for wav_fpath in
                tqdm(gt_paths, "Preprocessing gt files", len(gt_paths))]
@@ -26,12 +25,16 @@ def resemblyze_score(gt_dir, converted_dir):
     scores = (gt_embs @ converted_embs.T).mean(axis=0)
     return scores
 
+
 def wvmos_score(model, dir):
     wvmos_list = []
+    # Glob once and reuse (was called twice before: once for tqdm total, once for iteration)
+    audio_paths = glob_audio_files(dir)
     print(f"Calculating wvmos for {dir}")
-    for paths in tqdm(glob_audio_files(dir), "Calculating wvmos", len(glob_audio_files(dir))):
-        wvmos_list.append(model.calculate_one(paths))
+    for path in tqdm(audio_paths, "Calculating wvmos", len(audio_paths)):
+        wvmos_list.append(model.calculate_one(path))
     return wvmos_list
+
 
 def make_gt_subset(gt_dir):
     print("Creating gt subset")
@@ -51,6 +54,7 @@ def make_gt_subset(gt_dir):
     print(f"Attempted to create {NUM_SUBSETS} subsets of {SECONDS} seconds each for each audio file in {subset_dir}")
     return subset_dir
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--gt_dir", type=str, required=True)
@@ -69,7 +73,6 @@ def main():
     print(f"WVMOS score: {np.array(converted_wvmos_scores).mean():.3f}")
     print(f"Resemblyzer score: {resemblyzer_scores.mean():.3f}")
 
+
 if __name__ == "__main__":
     main()
-        
-

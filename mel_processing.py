@@ -1,47 +1,25 @@
-import math
-import os
-import random
 import torch
-from torch import nn
-import torch.nn.functional as F
 import torch.utils.data
 import numpy as np
-import librosa
-import librosa.util as librosa_util
-from librosa.util import normalize, pad_center, tiny
-from scipy.signal import get_window
-from scipy.io.wavfile import read
 from librosa.filters import mel as librosa_mel_fn
 
 MAX_WAV_VALUE = 32768.0
 
 
 def dynamic_range_compression_torch(x, C=1, clip_val=1e-5):
-    """
-    PARAMS
-    ------
-    C: compression factor
-    """
     return torch.log(torch.clamp(x, min=clip_val) * C)
 
 
 def dynamic_range_decompression_torch(x, C=1):
-    """
-    PARAMS
-    ------
-    C: compression factor used to compress
-    """
     return torch.exp(x) / C
 
 
 def spectral_normalize_torch(magnitudes):
-    output = dynamic_range_compression_torch(magnitudes)
-    return output
+    return dynamic_range_compression_torch(magnitudes)
 
 
 def spectral_de_normalize_torch(magnitudes):
-    output = dynamic_range_decompression_torch(magnitudes)
-    return output
+    return dynamic_range_decompression_torch(magnitudes)
 
 
 mel_basis = {}
@@ -49,11 +27,6 @@ hann_window = {}
 
 
 def spectrogram_torch(y, n_fft, sampling_rate, hop_size, win_size, center=False):
-    if torch.min(y) < -1.:
-        print('min value is ', torch.min(y))
-    if torch.max(y) > 1.:
-        print('max value is ', torch.max(y))
-
     global hann_window
     dtype_device = str(y.dtype) + '_' + str(y.device)
     wnsize_dtype_device = str(win_size) + '_' + dtype_device
@@ -87,11 +60,6 @@ def spec_to_mel_torch(spec, n_fft, num_mels, sampling_rate, fmin, fmax):
 
 
 def mel_spectrogram_torch(y, sampling_rate, n_fft, num_mels, hop_size, win_size, fmin, fmax, center=False):
-    if torch.min(y) < -1.:
-        print('min value is ', torch.min(y))
-    if torch.max(y) > 1.:
-        print('max value is ', torch.max(y))
-
     global mel_basis, hann_window
     dtype_device = str(y.dtype) + '_' + str(y.device)
     fmax_dtype_device = str(fmax) + '_' + dtype_device

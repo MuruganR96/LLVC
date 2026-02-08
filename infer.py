@@ -9,20 +9,27 @@ import os
 from utils import glob_audio_files
 from tqdm import tqdm
 
+# Cache for Resample transforms to avoid re-creating per file
+_resample_cache = {}
+
 
 def load_model(checkpoint_path, config_path):
     with open(config_path) as f:
         config = json.load(f)
     model = Net(**config['model_params'])
     model.load_state_dict(torch.load(
-        checkpoint_path, map_location="cpu")['model'])
+        checkpoint_path, map_location="cpu", weights_only=False)['model'])
     return model, config['data']['sr']
 
 
 def load_audio(audio_path, sample_rate):
     audio, sr = torchaudio.load(audio_path)
     audio = audio.mean(0, keepdim=False)
-    audio = torchaudio.transforms.Resample(sr, sample_rate)(audio)
+    if sr != sample_rate:
+        cache_key = (sr, sample_rate)
+        if cache_key not in _resample_cache:
+            _resample_cache[cache_key] = torchaudio.transforms.Resample(sr, sample_rate)
+        audio = _resample_cache[cache_key](audio)
     return audio
 
 
@@ -118,12 +125,9 @@ def main():
                         help='Use streaming inference')
     args = parser.parse_args()
     model, sr = load_model(args.checkpoint_path, args.config_path)
-    if not os.path.exists(args.out_dir):
-        os.mkdir(args.out_dir)
+    os.makedirs(args.out_dir, exist_ok=True)
     # check if fname is a directory
     if os.path.isdir(args.fname):
-        if not os.path.exists(args.out_dir):
-            os.mkdir(args.out_dir)
         # recursively glob wav files
         rtf_list = []
         fnames = glob_audio_files(args.fname)

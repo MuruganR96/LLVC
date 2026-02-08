@@ -1,21 +1,18 @@
 """
-Torch dataset object for synthetically rendered spatial data.
+Torch dataset object for aligned audio pairs used in voice conversion training.
 """
 
 import os
+import glob
 import torch
 from scipy.io.wavfile import read
-import os
-import glob
 
 
 def get_dataset(dir):
-    original_files = glob.glob(os.path.join(dir, "*_original.wav"))
-    converted_files = []
-    for original_file in original_files:
-        converted_file = original_file.replace(
-            "_original.wav", "_converted.wav")
-        converted_files.append(converted_file)
+    original_files = sorted(glob.glob(os.path.join(dir, "*_original.wav")))
+    converted_files = [
+        f.replace("_original.wav", "_converted.wav") for f in original_files
+    ]
     return original_files, converted_files
 
 
@@ -45,37 +42,35 @@ class LLVCDataset(torch.utils.data.Dataset):
         self.original_files, self.converted_files = get_dataset(
             file_dir
         )
+        # In-memory cache to avoid redundant disk reads after the first epoch
+        self._cache = {}
 
     def __len__(self):
         return len(self.original_files)
 
+    def _load_and_normalize(self, path):
+        data, sr = load_wav(path)
+        assert sr == self.sr, f"Expected {self.sr}Hz, got {sr}Hz for file {path}"
+        tensor = torch.from_numpy(data).unsqueeze(0).float() / 32768.0
+        return tensor
+
+    def _pad_or_trim(self, tensor):
+        if tensor.shape[-1] < self.wav_len:
+            tensor = torch.nn.functional.pad(
+                tensor, (0, self.wav_len - tensor.shape[-1]))
+        else:
+            tensor = tensor[:, :self.wav_len]
+        return tensor
+
     def __getitem__(self, idx):
-        original_wav = self.original_files[idx]
-        converted_wav = self.converted_files[idx]
+        if idx in self._cache:
+            return self._cache[idx]
 
-        original_data, o_sr = load_wav(original_wav)
-        converted_data, c_sr = load_wav(converted_wav)
+        original = self._load_and_normalize(self.original_files[idx])
+        converted = self._load_and_normalize(self.converted_files[idx])
 
-        assert o_sr == self.sr, f"Expected {self.sr}Hz, got {o_sr}Hz for file {original_wav}"
-        assert c_sr == self.sr, f"Expected {self.sr}Hz, got {c_sr}Hz for file {converted_wav}"
+        original = self._pad_or_trim(original)
+        gt = self._pad_or_trim(converted)
 
-        converted = torch.from_numpy(original_data)
-        gt = torch.from_numpy(converted_data)
-
-        converted = converted.unsqueeze(0).to(torch.float) / 32768
-        gt = gt.unsqueeze(0).to(torch.float) / 32768
-
-        if gt.shape[-1] < self.wav_len:
-            gt = torch.cat(
-                (gt, torch.zeros(1, self.wav_len - gt.shape[-1])), dim=1)
-        else:
-            gt = gt[:, : self.wav_len]
-
-        if converted.shape[-1] < self.wav_len:
-            converted = torch.cat(
-                (converted, torch.zeros(1, self.wav_len - converted.shape[-1])), dim=1
-            )
-        else:
-            converted = converted[:, : self.wav_len]
-
-        return converted, gt
+        self._cache[idx] = (original, gt)
+        return original, gt

@@ -1,6 +1,6 @@
 import math
 from collections import OrderedDict
-from typing import Optional
+from typing import Optional, Tuple
 
 from torch import Tensor
 import torch
@@ -10,9 +10,8 @@ from speechbrain.lobes.models.transformer.Transformer import PositionalEncoding
 from cached_convnet import CachedConvNet
 
 
-def mod_pad(x, chunk_size, pad):
-    # Mod pad the input to perform integer number of
-    # inferences
+def mod_pad(x: Tensor, chunk_size: int, pad: Tuple[int, int]) -> Tuple[Tensor, int]:
+    """Pad input to perform integer number of inferences."""
     mod = 0
     if (x.shape[-1] % chunk_size) != 0:
         mod = chunk_size - (x.shape[-1] % chunk_size)
@@ -273,9 +272,9 @@ class CausalTransformerDecoder(nn.Module):
             if self.use_pos_enc and i == 0:
                 tgt_ctx = tgt_ctx + self.pos_enc(tgt_ctx)
             tgt = torch.zeros_like(tgt_ctx)[:, -self.chunk_size:, :]
-            for i in range(int(math.ceil(tgt.shape[0] / K))):
-                tgt[i*K:(i+1)*K], _sa_map, _ca_map = tf_dec_layer(
-                    tgt_ctx[i*K:(i+1)*K], mem_ctx[i*K:(i+1)*K],
+            for j in range(int(math.ceil(tgt.shape[0] / K))):
+                tgt[j*K:(j+1)*K], _sa_map, _ca_map = tf_dec_layer(
+                    tgt_ctx[j*K:(j+1)*K], mem_ctx[j*K:(j+1)*K],
                     self.chunk_size)
             tgt = tgt.reshape(B, T, C)
 
