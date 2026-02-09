@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLVC Real-Time Voice Conversion</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>LLVC Real-Time Voice Conversion</h1>
+            <p class="subtitle">Low-Latency Voice Conversion &mdash; CPU Inference</p>
+        </header>
+
+        <!-- Model Selection -->
+        <section class="card" id="model-section">
+            <div class="card-header">Model Selection</div>
+            <div class="card-body row">
+                <div class="field">
+                    <label for="model-select">Speaker Model</label>
+                    <select id="model-select">
+                        <option value="">-- Select Model --</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <button id="load-model-btn" class="btn btn-primary" disabled>Load Model</button>
+                </div>
+                <div class="field status-field">
+                    <span class="status-dot" id="status-dot"></span>
+                    <span id="status-text">No model loaded</span>
+                </div>
+                <div class="field" id="model-info" style="display:none;">
+                    <span class="tag" id="model-params-tag"></span>
+                    <span class="tag" id="model-sr-tag"></span>
+                    <span class="tag" id="model-load-tag"></span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Mic + File panels side by side -->
+        <div class="row panels">
+            <!-- Mic Mode -->
+            <section class="card half" id="mic-section">
+                <div class="card-header">Microphone Mode</div>
+                <div class="card-body">
+                    <div class="row">
+                        <button id="mic-start-btn" class="btn btn-success" disabled>Start Mic</button>
+                        <button id="mic-stop-btn" class="btn btn-danger" disabled>Stop Mic</button>
+                    </div>
+                    <div class="field">
+                        <label for="chunk-factor-slider">Chunk Factor: <span id="chunk-factor-val">4</span></label>
+                        <input type="range" id="chunk-factor-slider" min="1" max="10" value="4" step="1">
+                        <small>Chunk size: <span id="chunk-size-display">832</span> samples (<span id="chunk-ms-display">52</span>ms)</small>
+                    </div>
+                    <div class="level-meters">
+                        <div class="meter-row">
+                            <span class="meter-label">Input</span>
+                            <div class="meter-bar"><div class="meter-fill" id="input-level"></div></div>
+                        </div>
+                        <div class="meter-row">
+                            <span class="meter-label">Output</span>
+                            <div class="meter-bar"><div class="meter-fill output" id="output-level"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- File Mode -->
+            <section class="card half" id="file-section">
+                <div class="card-header">File Upload Mode</div>
+                <div class="card-body">
+                    <div id="drop-zone" class="drop-zone">
+                        <p>Drag & drop audio file here</p>
+                        <p>or</p>
+                        <input type="file" id="file-input" accept="audio/*" style="display:none">
+                        <button id="file-choose-btn" class="btn btn-secondary">Choose File</button>
+                    </div>
+                    <div id="file-info" style="display:none;">
+                        <p><strong id="file-name"></strong> &mdash; <span id="file-duration"></span>s</p>
+                        <div class="row">
+                            <button id="file-convert-btn" class="btn btn-success" disabled>Convert & Play</button>
+                            <button id="file-stop-btn" class="btn btn-danger" disabled>Stop</button>
+                        </div>
+                        <div class="progress-bar" id="file-progress-container" style="display:none;">
+                            <div class="progress-fill" id="file-progress"></div>
+                        </div>
+                        <div id="file-player" class="file-player" style="display:none;">
+                            <div class="player-label">Converted Audio</div>
+                            <audio id="file-audio" controls></audio>
+                            <div class="row player-actions">
+                                <button id="file-download-btn" class="btn btn-small btn-secondary">Download WAV</button>
+                                <button id="file-reconvert-btn" class="btn btn-small btn-primary">Re-convert</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Metrics -->
+        <section class="card" id="metrics-section">
+            <div class="card-header">Performance Metrics</div>
+            <div class="card-body row metrics-row">
+                <div class="metric">
+                    <span class="metric-label">RTF</span>
+                    <span class="metric-value" id="metric-rtf">--</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Chunk Latency</span>
+                    <span class="metric-value" id="metric-latency">--</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Chunks Processed</span>
+                    <span class="metric-value" id="metric-chunks">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">RSS Memory</span>
+                    <span class="metric-value" id="metric-rss">--</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Memory Chart (MANDATORY) -->
+        <section class="card" id="memory-section">
+            <div class="card-header">
+                CPU Memory Usage (per streaming frame)
+                <button id="clear-chart-btn" class="btn btn-small btn-secondary">Clear</button>
+            </div>
+            <div class="card-body chart-container">
+                <canvas id="memory-chart"></canvas>
+            </div>
+        </section>
+
+        <!-- Waveform -->
+        <section class="card" id="waveform-section">
+            <div class="card-header">Audio Waveform</div>
+            <div class="card-body">
+                <canvas id="waveform-canvas" width="800" height="200"></canvas>
+            </div>
+        </section>
+    </div>
+
+    <script src="/static/js/memory-chart.js"></script>
+    <script src="/static/js/websocket-client.js"></script>
+    <script src="/static/js/audio-capture.js"></script>
+    <script src="/static/js/audio-playback.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
