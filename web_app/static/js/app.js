@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/api/models');
             const data = await res.json();
-            modelSelect.innerHTML = '<option value="">-- Select Model --</option>';
+            modelSelect.innerHTML = '<option value="">-- Select Speaker --</option>';
             for (const [key, info] of Object.entries(data.models)) {
                 const opt = document.createElement('option');
                 opt.value = key;
@@ -374,8 +374,9 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             fileWs.onAudio = (float32) => {
                 const chunk = new Float32Array(float32);
-                audioPlayback.enqueue(chunk);
+                // Copy for replay buffer BEFORE enqueue (enqueue may transfer/detach the buffer)
                 convertedChunks.push(new Float32Array(chunk));
+                audioPlayback.enqueue(chunk);
                 appendWaveform(new Float32Array(float32.length).fill(0), float32);
             };
             fileWs.onControl = (msg) => {

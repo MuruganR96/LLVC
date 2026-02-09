@@ -20,27 +20,37 @@ from model import Net
 from utils import model_size
 
 
-# Model registry
-MODELS_REGISTRY = {
-    "llvc": {
-        "name": "LLVC (Standard)",
-        "checkpoint": "llvc_models/models/checkpoints/llvc/G_500000.pth",
-        "config": "experiments/llvc/config.json",
-        "description": "Standard LLVC with ConvNet prenet and RVC discriminator",
-    },
-    "llvc_hfg": {
-        "name": "LLVC-HFG",
-        "checkpoint": "llvc_models/models/checkpoints/llvc_hfg/G_500000.pth",
-        "config": "experiments/llvc_hfg/config.json",
-        "description": "LLVC with HiFi-GAN discriminator",
-    },
-    "llvc_nc": {
-        "name": "LLVC-NC (No Convnet)",
-        "checkpoint": "llvc_models/models/checkpoints/llvc_nc/G_500000.pth",
-        "config": "experiments/llvc_nc/config.json",
-        "description": "LLVC without ConvNet prenet — faster, lower quality",
-    },
-}
+# LLVC-HFG config (default and only model architecture)
+LLVC_HFG_CONFIG = "experiments/llvc_hfg/config.json"
+LLVC_HFG_CHECKPOINTS_DIR = "llvc_models/models/checkpoints/llvc_hfg"
+
+
+def scan_speaker_checkpoints():
+    """Scan the llvc_hfg checkpoints directory for .pth speaker models.
+
+    Returns a dict keyed by speaker name (derived from filename), e.g.:
+        {"LibriSpeech_Female_8312": {"name": "LibriSpeech Female 8312", "checkpoint": "...", ...}}
+    """
+    registry = {}
+    ckpt_dir = os.path.join(PROJECT_ROOT, LLVC_HFG_CHECKPOINTS_DIR)
+    if not os.path.isdir(ckpt_dir):
+        return registry
+
+    for fname in sorted(os.listdir(ckpt_dir)):
+        if not fname.endswith(".pth"):
+            continue
+        key = os.path.splitext(fname)[0]  # e.g. "LibriSpeech_Female_8312"
+        display_name = key.replace("_", " ")  # e.g. "LibriSpeech Female 8312"
+        registry[key] = {
+            "name": display_name,
+            "checkpoint": os.path.join(LLVC_HFG_CHECKPOINTS_DIR, fname),
+            "config": LLVC_HFG_CONFIG,
+            "description": f"LLVC-HFG speaker: {display_name}",
+        }
+    return registry
+
+
+MODELS_REGISTRY = scan_speaker_checkpoints()
 
 
 class StreamingInferenceEngine:
